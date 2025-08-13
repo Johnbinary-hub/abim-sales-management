@@ -1,0 +1,44 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Receipt</title>
+  <style>
+    body{font-family:monospace;padding:20px}
+    .receipt{max-width:480px;margin:auto}
+    .line{border-bottom:1px dashed #000;margin:10px 0}
+  </style>
+</head>
+<body>
+  <div class="receipt" id="receiptContent">
+    <h3 style="text-align:center">AbimBest Store</h3>
+    <div class="line"></div>
+    <div><strong>Date:</strong> <span id="date"></span></div>
+    <div class="line"></div>
+    <ul id="items"></ul>
+    <div class="line"></div>
+    <div><strong>Total: ₦<span id="total"></span></strong></div>
+    <div class="line"></div>
+    <p style="text-align:center">Thank you!</p>
+  </div>
+
+<script>
+const data = JSON.parse(localStorage.getItem('receiptData') || 'null');
+if(!data){ alert('No receipt data'); window.close(); }
+else {
+  document.getElementById('date').textContent = data.date || '';
+  const list = document.getElementById('items');
+  (data.items||[]).forEach(it=>{
+    const li = document.createElement('li');
+    li.textContent = `${it.name} x ${it.qty || 1} — ₦${(it.price*(it.qty||1)).toFixed(2)}`;
+    list.appendChild(li);
+  });
+  document.getElementById('total').textContent = Number(data.total).toFixed(2);
+  // auto print
+  window.print();
+  window.onafterprint = ()=>{ window.close(); };
+}
+</script>
+</body>
+</html>
