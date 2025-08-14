@@ -1,44 +1,74 @@
-<!doctype html>
-<html>
+<!DOCTYPE html>
+<html lang="en">
 <head>
-  <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Receipt</title>
-  <style>
-    body{font-family:monospace;padding:20px}
-    .receipt{max-width:480px;margin:auto}
-    .line{border-bottom:1px dashed #000;margin:10px 0}
-  </style>
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
 </head>
-<body>
-  <div class="receipt" id="receiptContent">
-    <h3 style="text-align:center">AbimBest Store</h3>
-    <div class="line"></div>
-    <div><strong>Date:</strong> <span id="date"></span></div>
-    <div class="line"></div>
-    <ul id="items"></ul>
-    <div class="line"></div>
-    <div><strong>Total: ₦<span id="total"></span></strong></div>
-    <div class="line"></div>
-    <p style="text-align:center">Thank you!</p>
+<body class="p-4">
+  <div id="receipt" class="border p-3">
+    <h2 class="text-center">ABIMBEST STORE</h2>
+    <p class="text-center">Thanks for your patronage</p>
+    <p id="date"></p>
+    <table class="table table-bordered">
+      <thead>
+        <tr>
+          <th>Product</th>
+          <th>Qty</th>
+          <th>Price</th>
+          <th>Total</th>
+        </tr>
+      </thead>
+      <tbody id="items"></tbody>
+    </table>
+    <h4 class="text-end" id="total"></h4>
   </div>
 
-<script>
-const data = JSON.parse(localStorage.getItem('receiptData') || 'null');
-if(!data){ alert('No receipt data'); window.close(); }
-else {
-  document.getElementById('date').textContent = data.date || '';
-  const list = document.getElementById('items');
-  (data.items||[]).forEach(it=>{
-    const li = document.createElement('li');
-    li.textContent = `${it.name} x ${it.qty || 1} — ₦${(it.price*(it.qty||1)).toFixed(2)}`;
-    list.appendChild(li);
-  });
-  document.getElementById('total').textContent = Number(data.total).toFixed(2);
-  // auto print
-  window.print();
-  window.onafterprint = ()=>{ window.close(); };
-}
-</script>
+  <script type="module">
+    import { db } from './firebase-config.js';
+    import { doc, getDoc } from "https://www.gstatic.com/firebasejs/9.22.0/firebase-firestore.js";
+
+    const params = new URLSearchParams(window.location.search);
+    const saleId = params.get('saleId');
+    if (!saleId) {
+      document.body.innerHTML = '<p class="text-danger">No sale ID provided.</p>';
+      throw new Error("No sale ID");
+    }
+
+    const saleRef = doc(db, 'sales', saleId);
+    const snap = await getDoc(saleRef);
+
+    if (!snap.exists()) {
+      document.body.innerHTML = '<p class="text-danger">Sale not found.</p>';
+      throw new Error("Sale not found");
+    }
+
+    const sale = snap.data();
+    document.getElementById('date').textContent = `Date: ${sale.date.toDate().toLocaleString()}`;
+
+    const tbody = document.getElementById('items');
+    sale.items.forEach(item => {
+      const row = document.createElement('tr');
+      row.innerHTML = `
+        <td>${item.name}</td>
+        <td>${item.qty}</td>
+        <td>₦${item.price}</td>
+        <td>₦${(item.qty * item.price).toFixed(2)}</td>
+      `;
+      tbody.appendChild(row);
+    });
+
+    document.getElementById('total').textContent = `Total: ₦${sale.total.toFixed(2)}`;
+
+    // Auto print after loading, then notify opener and close
+    window.print();
+    window.onafterprint = () => {
+      if (window.opener) {
+        window.opener.postMessage('refreshDashboard', '*');
+      }
+      window.close();
+    };
+  </script>
 </body>
 </html>

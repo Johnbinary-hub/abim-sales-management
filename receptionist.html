@@ -4,6 +4,45 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Receptionist Dashboard</title>
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
+  <style>
+    #suggestions {
+      position: absolute;
+      z-index: 1000;
+      width: 100%;
+      background: white;
+      border: 1px solid #ccc;
+      max-height: 200px;
+      overflow-y: auto;
+    }
+    #suggestions div {
+      padding: 5px 10px;
+      cursor: pointer;
+    }
+    #suggestions div:hover {
+      background: #f1f1f1;
+    }
+  </style>
+</head>
+<body class="bg-light">
+  <div class="container py-4">
+    <div class="d-flex justify-content-between align-items-center mb-4">
+      <h1 class="h3">Receptionist Dashboard</h1>
+      <button id="logoutBtn" class="btn btn-outline-secondary btn-sm">Logout</button>
+    </div>
+
+    <div class="card p-3 mb-4 position-relative">
+      <input type="text" id="searchCode" class="form-control" placeholder="Enter product code or name">
+      <div id="suggestions" class="d-none"></div>
+    </div>
+
+    <div class="card p-3 mb-4">
+      <h5>Cart</h5>
+      <ul id="cart" class="list-group mb-3"></ul>
+      <button id="finalizeBtn" class="btn btn-success">Finalize Sale & Print Receipt</button>
+    </div>
+  </div>
+
   <script type="module">
     import { auth, db } from './firebase-config.js';
     import {
@@ -13,50 +52,96 @@
       getDocs,
       doc,
       runTransaction,
-      addDoc
+      addDoc,
+      orderBy,
+      startAt,
+      endAt
     } from "https://www.gstatic.com/firebasejs/9.22.0/firebase-firestore.js";
     import { onAuthStateChanged, signOut } from "https://www.gstatic.com/firebasejs/9.22.0/firebase-auth.js";
 
     let cart = [];
+    const searchInput = document.getElementById('searchCode');
+    const suggestionsBox = document.getElementById('suggestions');
 
+    // Auth check
     onAuthStateChanged(auth, user => {
-      if (!user) {
-        window.location.href = 'index.html';
+      if (!user) window.location.href = 'index.html';
+    });
+
+    // Listen for refresh signal from receipt
+    window.addEventListener('message', (event) => {
+      if (event.data === 'refreshDashboard') {
+        location.reload();
       }
     });
 
-    document.getElementById('searchBtn').addEventListener('click', async () => {
-      const searchCode = document.getElementById('searchCode').value.trim();
-      if (!searchCode) return alert('Enter a product code');
-
-      const q = query(collection(db, 'products'), where('code', '==', searchCode));
-      const snap = await getDocs(q);
-
-      if (snap.empty) {
-        alert('Product not found');
+    // Live suggestions
+    searchInput.addEventListener('input', async () => {
+      const term = searchInput.value.trim().toLowerCase();
+      if (!term) {
+        suggestionsBox.classList.add('d-none');
         return;
       }
 
-      snap.forEach(docSnap => {
-        const product = docSnap.data();
-        const qty = parseInt(prompt(`Enter quantity for ${product.name}`), 10);
-        if (!qty || qty < 1) return;
-        cart.push({ id: docSnap.id, name: product.name, price: product.price, qty });
+      const colRef = collection(db, 'products');
+      const nameQ = query(colRef, orderBy('name'), startAt(term), endAt(term + '\uf8ff'));
+      const codeQ = query(colRef, orderBy('code'), startAt(term), endAt(term + '\uf8ff'));
+
+      const [nameSnap, codeSnap] = await Promise.all([getDocs(nameQ), getDocs(codeQ)]);
+
+      let results = [];
+      nameSnap.forEach(docSnap => results.push({ id: docSnap.id, ...docSnap.data() }));
+      codeSnap.forEach(docSnap => {
+        if (!results.find(r => r.id === docSnap.id)) {
+          results.push({ id: docSnap.id, ...docSnap.data() });
+        }
       });
 
-      renderCart();
+      if (results.length === 0) {
+        suggestionsBox.classList.add('d-none');
+        return;
+      }
+
+      suggestionsBox.innerHTML = '';
+      results.forEach(prod => {
+        const div = document.createElement('div');
+        div.textContent = `${prod.name} (Code: ${prod.code}) - ₦${prod.price}`;
+        div.addEventListener('click', () => selectProduct(prod));
+        suggestionsBox.appendChild(div);
+      });
+      suggestionsBox.classList.remove('d-none');
     });
 
+    // Select product from suggestion
+    function selectProduct(product) {
+      suggestionsBox.classList.add('d-none');
+      searchInput.value = '';
+      const qty = parseInt(prompt(`Enter quantity for ${product.name}`), 10);
+      if (!qty || qty < 1) return;
+      cart.push({ id: product.id, name: product.name, price: product.price, qty });
+      renderCart();
+    }
+
+    // Render cart with remove button
     function renderCart() {
       const cartList = document.getElementById('cart');
       cartList.innerHTML = '';
-      cart.forEach(item => {
+      cart.forEach((item, index) => {
         const li = document.createElement('li');
-        li.textContent = `${item.name} - ${item.qty} x ${item.price}`;
+        li.className = 'list-group-item d-flex justify-content-between align-items-center';
+        li.innerHTML = `
+          ${item.name} - ${item.qty} x ₦${item.price}
+          <button class="btn btn-sm btn-danger">Remove</button>
+        `;
+        li.querySelector('button').addEventListener('click', () => {
+          cart.splice(index, 1);
+          renderCart();
+        });
         cartList.appendChild(li);
       });
     }
 
+    // Finalize sale
     document.getElementById('finalizeBtn').addEventListener('click', async () => {
       if (cart.length === 0) {
         alert('Cart is empty');
@@ -66,18 +151,12 @@
       try {
         await runTransaction(db, async (transaction) => {
           const productDocs = [];
-
-          // Step 1: Read all products first
           for (let item of cart) {
             const ref = doc(db, "products", item.id);
             const snap = await transaction.get(ref);
-            if (!snap.exists()) {
-              throw `Product ${item.name} does not exist`;
-            }
+            if (!snap.exists()) throw `Product ${item.name} does not exist`;
             productDocs.push({ ref, data: snap.data(), qty: item.qty, name: item.name });
           }
-
-          // Step 2: Update stock for all products
           for (let p of productDocs) {
             const newStock = p.data.stock - p.qty;
             if (newStock < 0) throw `Not enough stock for ${p.name}`;
@@ -85,33 +164,24 @@
           }
         });
 
-        // Step 3: Save sale record
-        await addDoc(collection(db, 'sales'), {
+        const saleRef = await addDoc(collection(db, 'sales'), {
           items: cart,
-          date: new Date()
+          date: new Date(),
+          total: cart.reduce((sum, item) => sum + (item.price * item.qty), 0)
         });
 
-        alert('Sale finalized successfully');
+        window.open(`reciept.html?saleId=${saleRef.id}`, '_blank');
+
         cart = [];
         renderCart();
 
       } catch (e) {
-        console.error("Sale failed: ", e);
         alert("Sale failed: " + e);
       }
     });
 
-    document.getElementById('logoutBtn').addEventListener('click', () => {
-      signOut(auth);
-    });
+    // Logout
+    document.getElementById('logoutBtn').addEventListener('click', () => signOut(auth));
   </script>
-</head>
-<body>
-  <h1>Receptionist Dashboard</h1>
-  <input type="text" id="searchCode" placeholder="Enter product code">
-  <button id="searchBtn">Search</button>
-  <ul id="cart"></ul>
-  <button id="finalizeBtn">Finalize Sale</button>
-  <button id="logoutBtn">Logout</button>
 </body>
 </html>
