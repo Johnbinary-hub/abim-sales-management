@@ -32,13 +32,19 @@
     </div>
 
     <div class="card p-3 mb-4 position-relative">
-      <input type="text" id="searchCode" class="form-control" placeholder="Enter product code or name">
+      <input type="text" id="searchCode" class="form-control" placeholder="Enter product name">
       <div id="suggestions" class="d-none"></div>
+    </div>
+
+    <div class="card p-3 mb-4">
+      <h5>Available Products</h5>
+      <ul id="productList" class="list-group mb-3"></ul>
     </div>
 
     <div class="card p-3 mb-4">
       <h5>Cart</h5>
       <ul id="cart" class="list-group mb-3"></ul>
+      <h6 id="cartTotal" class="text-end fw-bold">Total: ₦0</h6>
       <button id="finalizeBtn" class="btn btn-success">Finalize Sale & Print Receipt</button>
     </div>
   </div>
@@ -48,20 +54,20 @@
     import {
       collection,
       query,
-      where,
+      orderBy,
+      startAt,
+      endAt,
       getDocs,
       doc,
       runTransaction,
-      addDoc,
-      orderBy,
-      startAt,
-      endAt
+      addDoc
     } from "https://www.gstatic.com/firebasejs/9.22.0/firebase-firestore.js";
     import { onAuthStateChanged, signOut } from "https://www.gstatic.com/firebasejs/9.22.0/firebase-auth.js";
 
     let cart = [];
     const searchInput = document.getElementById('searchCode');
     const suggestionsBox = document.getElementById('suggestions');
+    const productList = document.getElementById('productList');
 
     // Auth check
     onAuthStateChanged(auth, user => {
@@ -75,7 +81,25 @@
       }
     });
 
-    // Live suggestions
+    // Fetch all products on page load
+    async function loadAllProducts() {
+      const colRef = collection(db, 'products');
+      const nameQ = query(colRef, orderBy('name'));
+      const nameSnap = await getDocs(nameQ);
+
+      productList.innerHTML = '';
+      nameSnap.forEach(docSnap => {
+        const prod = { id: docSnap.id, ...docSnap.data() };
+        const li = document.createElement('li');
+        li.className = 'list-group-item d-flex justify-content-between align-items-center';
+        li.textContent = `${prod.name} (Code: ${prod.code}) - ₦${prod.price}`;
+        li.addEventListener('click', () => selectProduct(prod));
+        productList.appendChild(li);
+      });
+    }
+    loadAllProducts();
+
+    // Live suggestions (search only by name but display code too)
     searchInput.addEventListener('input', async () => {
       const term = searchInput.value.trim().toLowerCase();
       if (!term) {
@@ -85,17 +109,11 @@
 
       const colRef = collection(db, 'products');
       const nameQ = query(colRef, orderBy('name'), startAt(term), endAt(term + '\uf8ff'));
-      const codeQ = query(colRef, orderBy('code'), startAt(term), endAt(term + '\uf8ff'));
 
-      const [nameSnap, codeSnap] = await Promise.all([getDocs(nameQ), getDocs(codeQ)]);
+      const nameSnap = await getDocs(nameQ);
 
       let results = [];
       nameSnap.forEach(docSnap => results.push({ id: docSnap.id, ...docSnap.data() }));
-      codeSnap.forEach(docSnap => {
-        if (!results.find(r => r.id === docSnap.id)) {
-          results.push({ id: docSnap.id, ...docSnap.data() });
-        }
-      });
 
       if (results.length === 0) {
         suggestionsBox.classList.add('d-none');
@@ -112,7 +130,7 @@
       suggestionsBox.classList.remove('d-none');
     });
 
-    // Select product from suggestion
+    // Select product from list or suggestion
     function selectProduct(product) {
       suggestionsBox.classList.add('d-none');
       searchInput.value = '';
@@ -122,10 +140,14 @@
       renderCart();
     }
 
-    // Render cart with remove button
+    // Render cart
     function renderCart() {
       const cartList = document.getElementById('cart');
+      const cartTotalElem = document.getElementById('cartTotal');
+
       cartList.innerHTML = '';
+      let total = 0;
+
       cart.forEach((item, index) => {
         const li = document.createElement('li');
         li.className = 'list-group-item d-flex justify-content-between align-items-center';
@@ -138,7 +160,11 @@
           renderCart();
         });
         cartList.appendChild(li);
+
+        total += item.qty * item.price;
       });
+
+      cartTotalElem.textContent = `Total: ₦${total.toLocaleString()}`;
     }
 
     // Finalize sale
@@ -174,6 +200,7 @@
 
         cart = [];
         renderCart();
+        loadAllProducts(); // refresh product list after sale
 
       } catch (e) {
         alert("Sale failed: " + e);
