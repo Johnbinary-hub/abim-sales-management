@@ -54,7 +54,6 @@
   <hr />
   <h5>Sales History</h5>
 
-  <!-- 🔹 Date Filter UI -->
   <div class="row g-2 mb-3">
     <div class="col-md-3">
       <input type="date" id="startDate" class="form-control">
@@ -223,7 +222,20 @@ async function loadSales(startDate = null, endDate = null) {
     const data = s.data();
     const card = document.createElement('div');
     card.className = 'p-3 mb-2 bg-white border';
-    const dateStr = data.date?.toDate ? data.date.toDate().toLocaleString() : '';
+    
+    // ** Corrected date formatting **
+    const timestamp = data.date?.toDate ? data.date.toDate() : null;
+    let dateStr = '';
+    if (timestamp) {
+        const day = String(timestamp.getDate()).padStart(2, '0');
+        const month = String(timestamp.getMonth() + 1).padStart(2, '0');
+        const year = timestamp.getFullYear();
+        const hours = String(timestamp.getHours()).padStart(2, '0');
+        const minutes = String(timestamp.getMinutes()).padStart(2, '0');
+        const seconds = String(timestamp.getSeconds()).padStart(2, '0');
+        dateStr = `${day}/${month}/${year}, ${hours}:${minutes}:${seconds}`;
+    }
+
     card.innerHTML = `
       <div><strong>Date:</strong> ${escapeHtml(dateStr)}</div>
       <div><strong>Total:</strong> ₦${Number(data.total).toFixed(2)}</div>
