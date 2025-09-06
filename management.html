@@ -33,6 +33,10 @@
 
     <div class="col-md-6">
       <h5>Products</h5>
+      <!-- 🔹 Search Bar Added -->
+      <div class="mb-2">
+        <input id="productSearch" class="form-control" placeholder="Search products by name or code">
+      </div>
       <ul id="productList" class="list-group"></ul>
     </div>
   </div>
@@ -97,6 +101,8 @@ const secondaryApp = initApp({
 
 const secondaryAuth = getSecondaryAuth(secondaryApp);
 
+let allProducts = []; // 🔹 store all products globally
+
 // 🔹 Access check
 onAuthStateChanged(auth, async (user) => {
   if (!user) {
@@ -153,11 +159,24 @@ document.getElementById('productForm').addEventListener('submit', async (e)=>{
 
 // 🔹 Load Products
 async function loadProducts(){
-  const list = document.getElementById('productList');
-  list.innerHTML = '';
+  allProducts = []; // reset
   const snap = await getDocs(collection(db,'products'));
   snap.forEach(s=>{
     const p = { id: s.id, ...s.data() };
+    allProducts.push(p);
+  });
+  renderProducts(allProducts);
+}
+
+// 🔹 Render Products
+function renderProducts(products){
+  const list = document.getElementById('productList');
+  list.innerHTML = '';
+  if (products.length === 0) {
+    list.innerHTML = "<li class='list-group-item text-muted'>No products found.</li>";
+    return;
+  }
+  products.forEach(p=>{
     const li = document.createElement('li');
     li.className = 'list-group-item d-flex justify-content-between align-items-center';
     li.innerHTML = `
@@ -173,6 +192,16 @@ async function loadProducts(){
     list.appendChild(li);
   });
 }
+
+// 🔹 Product Search
+document.getElementById('productSearch').addEventListener('input', (e)=>{
+  const term = e.target.value.toLowerCase();
+  const filtered = allProducts.filter(p=>
+    p.name.toLowerCase().includes(term) ||
+    p.code.toLowerCase().includes(term)
+  );
+  renderProducts(filtered);
+});
 
 window.editProduct = async function(id){
   const d = await getDoc(doc(db,'products',id));
@@ -223,7 +252,6 @@ async function loadSales(startDate = null, endDate = null) {
     const card = document.createElement('div');
     card.className = 'p-3 mb-2 bg-white border';
     
-    // ** Corrected date formatting **
     const timestamp = data.date?.toDate ? data.date.toDate() : null;
     let dateStr = '';
     if (timestamp) {
