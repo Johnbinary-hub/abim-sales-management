@@ -33,7 +33,7 @@
 
     <div class="col-md-6">
       <h5>Products</h5>
-      <!-- 🔹 Search Bar Added -->
+      <!-- 🔹 Search Bar -->
       <div class="mb-2">
         <input id="productSearch" class="form-control" placeholder="Search products by name or code">
       </div>
@@ -73,7 +73,6 @@
     </div>
   </div>
 
-  <!-- 🔹 Clear Sales Button -->
   <div class="mb-3">
     <button id="clearSalesBtn" class="btn btn-danger w-100">Clear Sales History</button>
   </div>
@@ -88,7 +87,7 @@ import {
 } from 'https://www.gstatic.com/firebasejs/9.22.0/firebase-auth.js';
 import {
   doc, setDoc, collection, getDocs, addDoc, updateDoc, deleteDoc,
-  query, where, getDoc, onSnapshot, orderBy
+  query, where, getDoc, orderBy, onSnapshot
 } from 'https://www.gstatic.com/firebasejs/9.22.0/firebase-firestore.js';
 
 // --- Secondary Firebase App for creating users (prevents logout) ---
@@ -114,8 +113,8 @@ onAuthStateChanged(auth, async (user) => {
     window.location.href = 'index.html';
     return;
   }
-  loadProducts();
-  listenSales(); // default load
+  listenProducts(); // real-time products
+  listenSales();   // default sales load
 });
 
 // 🔹 Logout
@@ -159,18 +158,18 @@ document.getElementById('productForm').addEventListener('submit', async (e)=>{
     await addDoc(collection(db, 'products'), { code, name, price, stock });
   }
   document.getElementById('productForm').reset();
-  loadProducts();
 });
 
-// 🔹 Load Products
-async function loadProducts(){
-  allProducts = []; // reset
-  const snap = await getDocs(collection(db,'products'));
-  snap.forEach(s=>{
-    const p = { id: s.id, ...s.data() };
-    allProducts.push(p);
+// 🔹 Real-time Products
+function listenProducts(){
+  const productsRef = collection(db,'products');
+  onSnapshot(productsRef, (snap)=>{
+    allProducts = [];
+    snap.forEach(s=>{
+      allProducts.push({ id: s.id, ...s.data() });
+    });
+    renderProducts(allProducts);
   });
-  renderProducts(allProducts);
 }
 
 // 🔹 Render Products
@@ -222,7 +221,6 @@ window.editProduct = async function(id){
 window.deleteProduct = async function(id){
   if(!confirm('Delete product?')) return;
   await deleteDoc(doc(db,'products',id));
-  loadProducts();
 }
 
 // 🔹 Listen to Sales (default load)
