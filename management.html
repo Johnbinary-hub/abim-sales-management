@@ -73,6 +73,11 @@
     </div>
   </div>
 
+  <!-- 🔹 Clear Sales Button -->
+  <div class="mb-3">
+    <button id="clearSalesBtn" class="btn btn-danger w-100">Clear Sales History</button>
+  </div>
+
   <div id="salesHistory"></div>
 </div>
 
@@ -291,6 +296,26 @@ document.getElementById('filterBtn').addEventListener('click', () => {
 document.getElementById('resetBtn').addEventListener('click', () => {
   document.getElementById('startDate').value = '';
   document.getElementById('endDate').value = '';
+  loadSales();
+});
+
+// 🔹 Clear All Sales
+document.getElementById('clearSalesBtn').addEventListener('click', async ()=>{
+  if(!confirm('⚠️ This will permanently delete ALL sales records. Continue?')) return;
+
+  const snap = await getDocs(collection(db,'sales'));
+  if(snap.empty){
+    alert('No sales records to delete.');
+    return;
+  }
+
+  const batchDeletes = [];
+  snap.forEach(docSnap=>{
+    batchDeletes.push(deleteDoc(doc(db,'sales', docSnap.id)));
+  });
+
+  await Promise.all(batchDeletes);
+  alert('All sales records cleared!');
   loadSales();
 });
 
