@@ -33,7 +33,6 @@
 
     <div class="col-md-6">
       <h5>Products</h5>
-      <!-- 🔹 Search Bar -->
       <div class="mb-2">
         <input id="productSearch" class="form-control" placeholder="Search products by name or code">
       </div>
@@ -90,7 +89,6 @@ import {
   query, where, getDoc, orderBy, onSnapshot
 } from 'https://www.gstatic.com/firebasejs/9.22.0/firebase-firestore.js';
 
-// --- Secondary Firebase App for creating users (prevents logout) ---
 import { initializeApp as initApp } from 'https://www.gstatic.com/firebasejs/9.22.0/firebase-app.js';
 import { getAuth as getSecondaryAuth, createUserWithEmailAndPassword } from 'https://www.gstatic.com/firebasejs/9.22.0/firebase-auth.js';
 
@@ -105,25 +103,23 @@ const secondaryApp = initApp({
 
 const secondaryAuth = getSecondaryAuth(secondaryApp);
 
-let allProducts = []; // 🔹 store all products globally
+let allProducts = [];
 
-// 🔹 Access check
 onAuthStateChanged(auth, async (user) => {
   if (!user) {
     window.location.href = 'index.html';
     return;
   }
-  listenProducts(); // real-time products
-  listenSales();   // default sales load
+  listenProducts();
+  listenSales();
 });
 
-// 🔹 Logout
 document.getElementById('logoutBtn').addEventListener('click', async () => {
   await signOut(auth);
   window.location.href = 'index.html';
 });
 
-// 🔹 Create User
+// --- Create User ---
 document.getElementById('userCreateForm').addEventListener('submit', async (e)=>{
   e.preventDefault();
   const email = document.getElementById('newEmail').value.trim();
@@ -139,7 +135,7 @@ document.getElementById('userCreateForm').addEventListener('submit', async (e)=>
   }
 });
 
-// 🔹 Product Form
+// --- Product Form ---
 document.getElementById('productForm').addEventListener('submit', async (e)=>{
   e.preventDefault();
   const code = document.getElementById('code').value.trim();
@@ -160,7 +156,7 @@ document.getElementById('productForm').addEventListener('submit', async (e)=>{
   document.getElementById('productForm').reset();
 });
 
-// 🔹 Real-time Products
+// --- Listen Products ---
 function listenProducts(){
   const productsRef = collection(db,'products');
   onSnapshot(productsRef, (snap)=>{
@@ -172,7 +168,6 @@ function listenProducts(){
   });
 }
 
-// 🔹 Render Products
 function renderProducts(products){
   const list = document.getElementById('productList');
   list.innerHTML = '';
@@ -185,8 +180,8 @@ function renderProducts(products){
     li.className = 'list-group-item d-flex justify-content-between align-items-center';
     li.innerHTML = `
       <div>
-        <strong>${escapeHtml(p.name)}</strong> <br>
-        Code: ${escapeHtml(p.code)} • ₦${Number(p.price).toFixed(2)} • Stock: ${p.stock}
+        <strong>${escapeHtml(p.name)}</strong> (Code: ${escapeHtml(p.code)})<br>
+        ₦${Number(p.price).toFixed(2)} • Stock: ${p.stock}
       </div>
       <div>
         <button class="btn btn-sm btn-secondary me-1" onclick='editProduct("${p.id}")'>Edit</button>
@@ -197,7 +192,6 @@ function renderProducts(products){
   });
 }
 
-// 🔹 Product Search
 document.getElementById('productSearch').addEventListener('input', (e)=>{
   const term = e.target.value.toLowerCase();
   const filtered = allProducts.filter(p=>
@@ -223,12 +217,11 @@ window.deleteProduct = async function(id){
   await deleteDoc(doc(db,'products',id));
 }
 
-// 🔹 Listen to Sales (default load)
+// --- Sales ---
 function listenSales(){
   loadSales();
 }
 
-// 🔹 Load Sales (with optional filter)
 async function loadSales(startDate = null, endDate = null) {
   const salesDiv = document.getElementById('salesHistory');
   salesDiv.innerHTML = '';
@@ -271,23 +264,18 @@ async function loadSales(startDate = null, endDate = null) {
       <div><strong>Date:</strong> ${escapeHtml(dateStr)}</div>
       <div><strong>Total:</strong> ₦${Number(data.total).toFixed(2)}</div>
       <ul>
-        ${(data.items||[]).map(it=>{
-          const prod = allProducts.find(p => p.name === it.name);
-          const code = prod ? prod.code : '';
-          return `
+        ${(data.items||[]).map(it=>`
             <li>
-              <strong>${escapeHtml(it.name)}</strong> (${escapeHtml(code)})<br>
+              <strong>${escapeHtml(it.name)}</strong> (Code: ${escapeHtml(it.code)})<br>
               Qty: ${it.qty} — ₦${(it.price*it.qty).toFixed(2)}
             </li>
-          `;
-        }).join('')}
+          `).join('')}
       </ul>
     `;
     salesDiv.appendChild(card);
   });
 }
 
-// 🔹 Filter Button
 document.getElementById('filterBtn').addEventListener('click', () => {
   const startVal = document.getElementById('startDate').value;
   const endVal = document.getElementById('endDate').value;
@@ -301,28 +289,23 @@ document.getElementById('filterBtn').addEventListener('click', () => {
   loadSales(start, end);
 });
 
-// 🔹 Reset Button
 document.getElementById('resetBtn').addEventListener('click', () => {
   document.getElementById('startDate').value = '';
   document.getElementById('endDate').value = '';
   loadSales();
 });
 
-// 🔹 Clear All Sales
 document.getElementById('clearSalesBtn').addEventListener('click', async ()=>{
   if(!confirm('⚠️ This will permanently delete ALL sales records. Continue?')) return;
-
   const snap = await getDocs(collection(db,'sales'));
   if(snap.empty){
     alert('No sales records to delete.');
     return;
   }
-
   const batchDeletes = [];
   snap.forEach(docSnap=>{
     batchDeletes.push(deleteDoc(doc(db,'sales', docSnap.id)));
   });
-
   await Promise.all(batchDeletes);
   alert('All sales records cleared!');
   loadSales();
