@@ -14,7 +14,7 @@
     <table class="table table-bordered">
       <thead>
         <tr>
-          <th>Product (Code)</th>
+          <th>Product</th>
           <th>Qty</th>
           <th>Price</th>
           <th>Total</th>
@@ -51,7 +51,7 @@
     sale.items.forEach(item => {
       const row = document.createElement('tr');
       row.innerHTML = `
-        <td>${item.name} (Code: ${item.code})</td>
+        <td>${item.name} (${item.code})</td>
         <td>${item.qty}</td>
         <td>₦${item.price}</td>
         <td>₦${(item.qty * item.price).toFixed(2)}</td>

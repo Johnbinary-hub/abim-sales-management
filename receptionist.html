@@ -162,7 +162,16 @@
       searchInput.value = '';
       const qty = parseInt(prompt(`Enter quantity for ${product.name}`), 10);
       if (!qty || qty < 1) return;
-      cart.push({ id: product.id, name: product.name, price: product.price, qty });
+
+      // ✅ Save product code in cart
+      cart.push({
+        id: product.id,
+        name: product.name,
+        code: product.code,
+        price: product.price,
+        qty
+      });
+
       renderCart();
     }
 
@@ -178,7 +187,7 @@
         const li = document.createElement('li');
         li.className = 'list-group-item d-flex justify-content-between align-items-center';
         li.innerHTML = `
-          ${item.name} - ${item.qty} x ₦${item.price}
+          ${item.name} (${item.code}) - ${item.qty} x ₦${item.price}
           <button class="btn btn-sm btn-danger">Remove</button>
         `;
         li.querySelector('button').addEventListener('click', () => {
@@ -217,12 +226,12 @@
         });
 
         const saleRef = await addDoc(collection(db, 'sales'), {
-          items: cart,
+          items: cart, // ✅ cart now has code
           date: new Date(),
           total: cart.reduce((sum, item) => sum + (item.price * item.qty), 0)
         });
 
-        window.open(`reciept.html?saleId=${saleRef.id}`, '_blank');
+        window.open(`receipt.html?saleId=${saleRef.id}`, '_blank');
 
         cart = [];
         renderCart();
