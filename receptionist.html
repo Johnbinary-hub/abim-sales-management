@@ -231,7 +231,8 @@
           total: cart.reduce((sum, item) => sum + (item.price * item.qty), 0)
         });
 
-        window.open(`receipt.html?saleId=${saleRef.id}`, '_blank');
+      window.open(`pages/receipt.html?saleId=${docRef.id}`, "_blank");
+
 
         cart = [];
         renderCart();
