@@ -42,7 +42,7 @@
       </div>
     </div>
 
-    <!-- Search results dropdown (separate) -->
+    <!-- Search results dropdown -->
     <div class="card p-3 mb-4 d-none" id="suggestions"></div>
 
     <div class="card p-3 mb-4">
@@ -91,14 +91,14 @@
       }
     });
 
-    // Fetch all products on page load
+    // Fetch all products
     async function loadAllProducts() {
       const colRef = collection(db, 'products');
-      const nameQ = query(colRef, orderBy('name'));
-      const nameSnap = await getDocs(nameQ);
+      const q = query(colRef, orderBy('name'));
+      const snap = await getDocs(q);
 
       productList.innerHTML = '';
-      nameSnap.forEach(docSnap => {
+      snap.forEach(docSnap => {
         const prod = { id: docSnap.id, ...docSnap.data() };
         const li = document.createElement('li');
         li.className = 'list-group-item d-flex justify-content-between align-items-center';
@@ -109,14 +109,14 @@
     }
     loadAllProducts();
 
-    // Clear search box & reload products
+    // Clear search
     clearSearchBtn.addEventListener('click', () => {
       searchInput.value = '';
       suggestionsBox.classList.add('d-none');
       loadAllProducts();
     });
 
-    // Live suggestions (search by name OR code)
+    // Live suggestions
     searchInput.addEventListener('input', async () => {
       const term = searchInput.value.trim().toLowerCase();
       if (!term) {
@@ -128,20 +128,15 @@
       const nameQ = query(colRef, orderBy('name'), startAt(term), endAt(term + '\uf8ff'));
       const codeQ = query(colRef, orderBy('code'), startAt(term), endAt(term + '\uf8ff'));
 
-      const [nameSnap, codeSnap] = await Promise.all([
-        getDocs(nameQ),
-        getDocs(codeQ)
-      ]);
+      const [nameSnap, codeSnap] = await Promise.all([getDocs(nameQ), getDocs(codeQ)]);
 
       let results = [];
       nameSnap.forEach(docSnap => results.push({ id: docSnap.id, ...docSnap.data() }));
       codeSnap.forEach(docSnap => {
-        if (!results.find(r => r.id === docSnap.id)) {
-          results.push({ id: docSnap.id, ...docSnap.data() });
-        }
+        if (!results.find(r => r.id === docSnap.id)) results.push({ id: docSnap.id, ...docSnap.data() });
       });
 
-      if (results.length === 0) {
+      if (!results.length) {
         suggestionsBox.classList.add('d-none');
         return;
       }
@@ -156,14 +151,13 @@
       suggestionsBox.classList.remove('d-none');
     });
 
-    // Select product from list or suggestion
+    // Select product
     function selectProduct(product) {
       suggestionsBox.classList.add('d-none');
       searchInput.value = '';
       const qty = parseInt(prompt(`Enter quantity for ${product.name}`), 10);
       if (!qty || qty < 1) return;
 
-      // ✅ Save product code in cart
       cart.push({
         id: product.id,
         name: product.name,
@@ -186,16 +180,12 @@
       cart.forEach((item, index) => {
         const li = document.createElement('li');
         li.className = 'list-group-item d-flex justify-content-between align-items-center';
-        li.innerHTML = `
-          ${item.name} (${item.code}) - ${item.qty} x ₦${item.price}
-          <button class="btn btn-sm btn-danger">Remove</button>
-        `;
+        li.innerHTML = `${item.name} (${item.code}) - ${item.qty} x ₦${item.price} <button class="btn btn-sm btn-danger">Remove</button>`;
         li.querySelector('button').addEventListener('click', () => {
           cart.splice(index, 1);
           renderCart();
         });
         cartList.appendChild(li);
-
         total += item.qty * item.price;
       });
 
@@ -204,39 +194,34 @@
 
     // Finalize sale
     document.getElementById('finalizeBtn').addEventListener('click', async () => {
-      if (cart.length === 0) {
-        alert('Cart is empty');
-        return;
-      }
+      if (!cart.length) return alert('Cart is empty');
 
       try {
+        // Update stock in transaction
         await runTransaction(db, async (transaction) => {
-          const productDocs = [];
           for (let item of cart) {
             const ref = doc(db, "products", item.id);
             const snap = await transaction.get(ref);
             if (!snap.exists()) throw `Product ${item.name} does not exist`;
-            productDocs.push({ ref, data: snap.data(), qty: item.qty, name: item.name });
-          }
-          for (let p of productDocs) {
-            const newStock = p.data.stock - p.qty;
-            if (newStock < 0) throw `Not enough stock for ${p.name}`;
-            transaction.update(p.ref, { stock: newStock });
+            const newStock = snap.data().stock - item.qty;
+            if (newStock < 0) throw `Not enough stock for ${item.name}`;
+            transaction.update(ref, { stock: newStock });
           }
         });
 
+        // Save sale
         const saleRef = await addDoc(collection(db, 'sales'), {
-          items: cart, // ✅ cart now has code
+          items: cart,
           date: new Date(),
-          total: cart.reduce((sum, item) => sum + (item.price * item.qty), 0)
+          total: cart.reduce((sum, item) => sum + item.price * item.qty, 0)
         });
 
-      window.open(`pages/receipt.html?saleId=${docRef.id}`, "_blank");
-
+        // Open receipt
+        window.open(`receipt.html?saleId=${saleRef.id}`, "_blank");
 
         cart = [];
         renderCart();
-        loadAllProducts(); // refresh product list after sale
+        loadAllProducts();
 
       } catch (e) {
         alert("Sale failed: " + e);
