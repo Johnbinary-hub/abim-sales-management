@@ -91,7 +91,7 @@
       }
     });
 
-    // Fetch all products
+    // Fetch all products on page load
     async function loadAllProducts() {
       const colRef = collection(db, 'products');
       const q = query(colRef, orderBy('name'));
@@ -109,14 +109,14 @@
     }
     loadAllProducts();
 
-    // Clear search
+    // Clear search box & reload products
     clearSearchBtn.addEventListener('click', () => {
       searchInput.value = '';
       suggestionsBox.classList.add('d-none');
       loadAllProducts();
     });
 
-    // Live suggestions
+    // Live suggestions (search by name OR code)
     searchInput.addEventListener('input', async () => {
       const term = searchInput.value.trim().toLowerCase();
       if (!term) {
@@ -125,18 +125,22 @@
       }
 
       const colRef = collection(db, 'products');
-      const nameQ = query(colRef, orderBy('name'), startAt(term), endAt(term + '\uf8ff'));
-      const codeQ = query(colRef, orderBy('code'), startAt(term), endAt(term + '\uf8ff'));
+      const nameSnap = await getDocs(query(colRef, orderBy('name')));
+      const codeSnap = await getDocs(query(colRef, orderBy('code')));
 
-      const [nameSnap, codeSnap] = await Promise.all([getDocs(nameQ), getDocs(codeQ)]);
-
-      let results = [];
-      nameSnap.forEach(docSnap => results.push({ id: docSnap.id, ...docSnap.data() }));
+      const results = [];
+      nameSnap.forEach(docSnap => {
+        const data = docSnap.data();
+        if (data.name.toLowerCase().includes(term)) results.push({ id: docSnap.id, ...data });
+      });
       codeSnap.forEach(docSnap => {
-        if (!results.find(r => r.id === docSnap.id)) results.push({ id: docSnap.id, ...docSnap.data() });
+        const data = docSnap.data();
+        if (data.code.toLowerCase().includes(term) && !results.find(r => r.id === docSnap.id)) {
+          results.push({ id: docSnap.id, ...data });
+        }
       });
 
-      if (!results.length) {
+      if (results.length === 0) {
         suggestionsBox.classList.add('d-none');
         return;
       }
@@ -180,12 +184,16 @@
       cart.forEach((item, index) => {
         const li = document.createElement('li');
         li.className = 'list-group-item d-flex justify-content-between align-items-center';
-        li.innerHTML = `${item.name} (${item.code}) - ${item.qty} x ₦${item.price} <button class="btn btn-sm btn-danger">Remove</button>`;
+        li.innerHTML = `
+          ${item.name} (${item.code}) - ${item.qty} x ₦${item.price}
+          <button class="btn btn-sm btn-danger">Remove</button>
+        `;
         li.querySelector('button').addEventListener('click', () => {
           cart.splice(index, 1);
           renderCart();
         });
         cartList.appendChild(li);
+
         total += item.qty * item.price;
       });
 
@@ -194,29 +202,34 @@
 
     // Finalize sale
     document.getElementById('finalizeBtn').addEventListener('click', async () => {
-      if (!cart.length) return alert('Cart is empty');
+      if (cart.length === 0) {
+        alert('Cart is empty');
+        return;
+      }
 
       try {
-        // Update stock in transaction
         await runTransaction(db, async (transaction) => {
+          const productDocs = [];
           for (let item of cart) {
             const ref = doc(db, "products", item.id);
             const snap = await transaction.get(ref);
             if (!snap.exists()) throw `Product ${item.name} does not exist`;
-            const newStock = snap.data().stock - item.qty;
-            if (newStock < 0) throw `Not enough stock for ${item.name}`;
-            transaction.update(ref, { stock: newStock });
+            productDocs.push({ ref, data: snap.data(), qty: item.qty, name: item.name });
+          }
+          for (let p of productDocs) {
+            const newStock = p.data.stock - p.qty;
+            if (newStock < 0) throw `Not enough stock for ${p.name}`;
+            transaction.update(p.ref, { stock: newStock });
           }
         });
 
-        // Save sale
         const saleRef = await addDoc(collection(db, 'sales'), {
           items: cart,
           date: new Date(),
-          total: cart.reduce((sum, item) => sum + item.price * item.qty, 0)
+          total: cart.reduce((sum, item) => sum + (item.price * item.qty), 0)
         });
 
-        // Open receipt
+        // Open receipt with correct sale ID
         window.open(`receipt.html?saleId=${saleRef.id}`, "_blank");
 
         cart = [];
@@ -230,6 +243,7 @@
 
     // Logout
     document.getElementById('logoutBtn').addEventListener('click', () => signOut(auth));
+
   </script>
 </body>
 </html>
